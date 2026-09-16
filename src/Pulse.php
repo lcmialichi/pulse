@@ -160,9 +160,8 @@ class Pulse
         );
 
         if ($this->shouldRecord) {
-            $this->entries[] = $entry;
-
             $this->ingestWhenOverBufferSize();
+            $this->entries[] = $entry;
         }
 
         return $entry;
@@ -187,9 +186,8 @@ class Pulse
         );
 
         if ($this->shouldRecord) {
-            $this->entries[] = $value;
-
             $this->ingestWhenOverBufferSize();
+            $this->entries[] = $value;
         }
 
         return $value;
