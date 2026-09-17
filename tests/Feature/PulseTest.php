@@ -8,11 +8,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Facade;
+use Laravel\Pulse\Contracts\Ingest;
 use Laravel\Pulse\Contracts\ResolvesUsers;
 use Laravel\Pulse\Contracts\Storage;
 use Laravel\Pulse\Entry;
 use Laravel\Pulse\Facades\Pulse;
-use Laravel\Pulse\Contracts\Ingest;
 use Laravel\Pulse\Value;
 use Livewire\Livewire;
 use Livewire\LivewireManager;
@@ -210,7 +210,7 @@ it('can limit the buffer size of entries', function () {
 
     Pulse::record('type', 'key');
     expect(Pulse::wantsIngesting())->toBeTrue();
-    
+
     expect(Pulse::ingest())->toBe(1);
     expect(Pulse::wantsIngesting())->toBeFalse();
 
@@ -226,7 +226,7 @@ it('can limit the buffer size of entries', function () {
     Pulse::set('type', 'key', 'value');
     expect(Pulse::wantsIngesting())->toBeTrue();
     expect(Pulse::ingest())->toBe(1);
-    
+
     expect(Pulse::wantsIngesting())->toBeFalse();
 });
 
@@ -240,7 +240,7 @@ it('does not ingest the current entry before fluent configuration is applied', f
     });
 
     $ingestMock->shouldReceive('trim');
-    
+
     App::instance(Ingest::class, $ingestMock);
 
     Pulse::record('type', 'key');
@@ -251,17 +251,17 @@ it('does not ingest the current entry before fluent configuration is applied', f
     $entry = Pulse::record('type', 'key')
         ->avg()
         ->onlyBuckets();
-        
+
     expect($entry->isAvg())->toBeTrue()
         ->and($entry->isOnlyBuckets())->toBeTrue();
 
     Pulse::ingest();
     expect($ingestedBatches)->toHaveCount(2);
-    
+
     expect($ingestedBatches[0])->toHaveCount(4);
     expect($ingestedBatches[1])->toHaveCount(1);
     $flushedEntry = $ingestedBatches[1]->first();
-    
+
     expect($flushedEntry->isAvg())->toBeTrue()
         ->and($flushedEntry->isOnlyBuckets())->toBeTrue();
 });
@@ -271,18 +271,18 @@ it('resolves lazy entries when considering the buffer', function () {
 
     Pulse::lazy(fn () => Pulse::record('type', 'key'));
     expect(Pulse::wantsIngesting())->toBeTrue();
-    
-    Pulse::lazy(fn () => Pulse::set('type', 'key', 'value'));
-    expect(Pulse::wantsIngesting())->toBeTrue();
-    
-    Pulse::lazy(fn () => Pulse::record('type', 'key'));
-    expect(Pulse::wantsIngesting())->toBeTrue();
-    
+
     Pulse::lazy(fn () => Pulse::set('type', 'key', 'value'));
     expect(Pulse::wantsIngesting())->toBeTrue();
 
     Pulse::lazy(fn () => Pulse::record('type', 'key'));
-    
+    expect(Pulse::wantsIngesting())->toBeTrue();
+
+    Pulse::lazy(fn () => Pulse::set('type', 'key', 'value'));
+    expect(Pulse::wantsIngesting())->toBeTrue();
+
+    Pulse::lazy(fn () => Pulse::record('type', 'key'));
+
     expect(Pulse::wantsIngesting())->toBeTrue();
     expect(Pulse::ingest())->toBe(1);
     expect(Pulse::wantsIngesting())->toBeFalse();
