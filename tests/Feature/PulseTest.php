@@ -12,6 +12,7 @@ use Laravel\Pulse\Contracts\ResolvesUsers;
 use Laravel\Pulse\Contracts\Storage;
 use Laravel\Pulse\Entry;
 use Laravel\Pulse\Facades\Pulse;
+use Laravel\Pulse\Contracts\Ingest;
 use Laravel\Pulse\Value;
 use Livewire\Livewire;
 use Livewire\LivewireManager;
@@ -206,7 +207,11 @@ it('can limit the buffer size of entries', function () {
     expect(Pulse::wantsIngesting())->toBeTrue();
     Pulse::record('type', 'key');
     expect(Pulse::wantsIngesting())->toBeTrue();
+
     Pulse::record('type', 'key');
+    expect(Pulse::wantsIngesting())->toBeTrue();
+    
+    expect(Pulse::ingest())->toBe(1);
     expect(Pulse::wantsIngesting())->toBeFalse();
 
     Pulse::set('type', 'key', 'value');
@@ -217,11 +222,48 @@ it('can limit the buffer size of entries', function () {
     expect(Pulse::wantsIngesting())->toBeTrue();
     Pulse::set('type', 'key', 'value');
     expect(Pulse::wantsIngesting())->toBeTrue();
-    Pulse::set('type', 'key', 'value');
-    expect(Pulse::wantsIngesting())->toBeTrue();
 
     Pulse::set('type', 'key', 'value');
+    expect(Pulse::wantsIngesting())->toBeTrue();
+    expect(Pulse::ingest())->toBe(1);
+    
     expect(Pulse::wantsIngesting())->toBeFalse();
+});
+
+it('does not ingest the current entry before fluent configuration is applied', function () {
+    Config::set('pulse.ingest.buffer', 4);
+
+    $ingestedBatches = collect();
+    $ingestMock = Mockery::mock(Ingest::class);
+    $ingestMock->shouldReceive('ingest')->andReturnUsing(function ($entries) use ($ingestedBatches) {
+        $ingestedBatches->push($entries->map(fn ($entry) => clone $entry));
+    });
+
+    $ingestMock->shouldReceive('trim');
+    
+    App::instance(Ingest::class, $ingestMock);
+
+    Pulse::record('type', 'key');
+    Pulse::record('type', 'key');
+    Pulse::record('type', 'key');
+    Pulse::record('type', 'key');
+
+    $entry = Pulse::record('type', 'key')
+        ->avg()
+        ->onlyBuckets();
+        
+    expect($entry->isAvg())->toBeTrue()
+        ->and($entry->isOnlyBuckets())->toBeTrue();
+
+    Pulse::ingest();
+    expect($ingestedBatches)->toHaveCount(2);
+    
+    expect($ingestedBatches[0])->toHaveCount(4);
+    expect($ingestedBatches[1])->toHaveCount(1);
+    $flushedEntry = $ingestedBatches[1]->first();
+    
+    expect($flushedEntry->isAvg())->toBeTrue()
+        ->and($flushedEntry->isOnlyBuckets())->toBeTrue();
 });
 
 it('resolves lazy entries when considering the buffer', function () {
@@ -229,13 +271,20 @@ it('resolves lazy entries when considering the buffer', function () {
 
     Pulse::lazy(fn () => Pulse::record('type', 'key'));
     expect(Pulse::wantsIngesting())->toBeTrue();
+    
     Pulse::lazy(fn () => Pulse::set('type', 'key', 'value'));
     expect(Pulse::wantsIngesting())->toBeTrue();
+    
     Pulse::lazy(fn () => Pulse::record('type', 'key'));
     expect(Pulse::wantsIngesting())->toBeTrue();
+    
     Pulse::lazy(fn () => Pulse::set('type', 'key', 'value'));
     expect(Pulse::wantsIngesting())->toBeTrue();
+
     Pulse::lazy(fn () => Pulse::record('type', 'key'));
+    
+    expect(Pulse::wantsIngesting())->toBeTrue();
+    expect(Pulse::ingest())->toBe(1);
     expect(Pulse::wantsIngesting())->toBeFalse();
 });
 
@@ -325,27 +374,6 @@ it('accepts unit enums for record type', function () {
     expect($storage->stored)->toHaveCount(1);
     expect($storage->stored[0])->toBeInstanceOf(Entry::class);
     expect($storage->stored[0]->type)->toBe('Slow');
-});
-
-it('does not ingest the current entry before fluent configuration is applied', function () {
-    Config::set('pulse.ingest.buffer', 4);
-    App::instance(Storage::class, new StorageFake);
-
-    Pulse::record('type', 'key');
-    Pulse::record('type', 'key');
-    Pulse::record('type', 'key');
-    Pulse::record('type', 'key');
-
-    $entry = Pulse::record('type', 'key')
-        ->avg()
-        ->onlyBuckets();
-
-    expect(Pulse::wantsIngesting())->toBeTrue()
-        ->and($entry->isAvg())->toBeTrue()
-        ->and($entry->isOnlyBuckets())->toBeTrue();
-
-    Pulse::ingest();
-    expect(Pulse::wantsIngesting())->toBeFalse();
 });
 
 class MyTestMiddleware

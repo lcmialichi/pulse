@@ -199,9 +199,8 @@ class Pulse
     public function lazy(callable $closure): self
     {
         if ($this->shouldRecord) {
-            $this->lazy[] = $closure;
-
             $this->ingestWhenOverBufferSize();
+            $this->lazy[] = $closure;
         }
 
         return $this;
@@ -352,13 +351,13 @@ class Pulse
 
         $buffer = $this->app->make('config')->get('pulse.ingest.buffer') ?? 5_000;
 
-        if (($this->entries->count() + $this->lazy->count()) > $buffer) {
+        if (($this->entries->count() + $this->lazy->count()) >= $buffer) {
             $this->evaluatingBuffer = true;
 
             $this->resolveLazyEntries();
         }
 
-        if ($this->entries->count() > $buffer) {
+        if ($this->entries->count() >= $buffer) {
             $this->evaluatingBuffer = true;
 
             $this->ingest();
